@@ -37,15 +37,42 @@ async def find_market():
  now=datetime.now(timezone.utc); ms=[m for m in d.get("markets",[]) if parse(m.get("close_time","")) and parse(m["close_time"])>now]
  return min(ms,key=lambda m:parse(m["close_time"])) if ms else None
 def val(n): return state.get(n,market.get(n) if market else None)
+def _num(v):
+ try: return float(v)
+ except: return None
+
+def _yes_book():
+ # WebSocket YES bid/ask are the source of truth. Fall back to REST only
+ # before the first ticker packet arrives.
+ yb = state.get("yes_bid_dollars")
+ ya = state.get("yes_ask_dollars")
+ if yb is None: yb = market.get("yes_bid_dollars") if market else None
+ if ya is None: ya = market.get("yes_ask_dollars") if market else None
+ return _num(yb), _num(ya)
+
 def embed():
+ yb, ya = _yes_book()
+
+ # Binary complement:
+ # NO bid = 1 - YES ask
+ # NO ask = 1 - YES bid
+ nb = max(0.0, min(1.0, 1.0 - ya)) if ya is not None else None
+ na = max(0.0, min(1.0, 1.0 - yb)) if yb is not None else None
+
+ last = state.get("price_dollars")
+ if last is None:
+  last = market.get("last_price_dollars") if market else None
+
  e=discord.Embed(title="₿ BTC 15-Minute Kalshi Market",description=market.get("title","Live market"),color=0x5865F2,timestamp=datetime.now(timezone.utc))
- e.add_field(name="🟢 UP / YES",value=f'Bid **{pc(val("yes_bid_dollars"))}**\nAsk **{pc(val("yes_ask_dollars"))}**',inline=True)
- e.add_field(name="🔴 DOWN / NO",value=f'Bid **{pc(val("no_bid_dollars"))}**\nAsk **{pc(val("no_ask_dollars"))}**',inline=True)
- e.add_field(name="Last Trade",value=f'**{pc(state.get("price_dollars",val("last_price_dollars")))}**',inline=True)
+ e.add_field(name="🟢 UP / YES",value=f'Bid **{pc(yb)}**\\nAsk **{pc(ya)}**',inline=True)
+ e.add_field(name="🔴 DOWN / NO",value=f'Bid **{pc(nb)}**\\nAsk **{pc(na)}**',inline=True)
+ e.add_field(name="Last Trade",value=f'**{pc(last)}**',inline=True)
  e.add_field(name="⏱ Time Left",value=f"**{left()}**",inline=True)
  e.add_field(name="Feed",value="⚡ Kalshi WebSocket",inline=True)
  e.add_field(name="Ticker",value=f'`{market.get("ticker","—")}`',inline=False)
+ e.set_footer(text="Live Kalshi WebSocket • DOWN derived from live YES book")
  return e
+
 async def feed(ticker):
  global state
  backoff=1
