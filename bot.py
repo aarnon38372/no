@@ -63,14 +63,14 @@ def embed():
  if last is None:
   last = market.get("last_price_dollars") if market else None
 
- e=discord.Embed(title="₿ BTC 15-Minute Kalshi Market",description=market.get("title","Live market"),color=0x5865F2,timestamp=datetime.now(timezone.utc))
- e.add_field(name="🟢 UP / YES",value=f'Bid **{pc(yb)}**\\nAsk **{pc(ya)}**',inline=True)
- e.add_field(name="🔴 DOWN / NO",value=f'Bid **{pc(nb)}**\\nAsk **{pc(na)}**',inline=True)
+ e=discord.Embed(title="₿ BTC • 15 MIN",description=market.get("title","Live market"),color=0x5865F2,timestamp=datetime.now(timezone.utc))
+ e.add_field(name="🟢 UP",value=f'Bid **{pc(yb)}**\\nAsk **{pc(ya)}**',inline=True)
+ e.add_field(name="🔴 DOWN",value=f'Bid **{pc(nb)}**\\nAsk **{pc(na)}**',inline=True)
  e.add_field(name="Last Trade",value=f'**{pc(last)}**',inline=True)
- e.add_field(name="⏱ Time Left",value=f"**{left()}**",inline=True)
- e.add_field(name="Feed",value="⚡ Kalshi WebSocket",inline=True)
+ e.add_field(name="⏱ TIME LEFT",value=f"**{left()}**",inline=True)
+ e.add_field(name="📡 FEED",value="⚡ LIVE",inline=True)
  e.add_field(name="Ticker",value=f'`{market.get("ticker","—")}`',inline=False)
- e.set_footer(text="Live Kalshi WebSocket • DOWN derived from live YES book")
+ e.set_footer(text="Kalshi WebSocket • live 15m market")
  return e
 
 async def feed(ticker):
@@ -90,14 +90,15 @@ async def feed(ticker):
   except Exception as e: log.warning("WS reconnect %r",e)
   await asyncio.sleep(backoff); backoff=min(15,backoff*2)
 async def render():
+ global msg
  while True:
-  try: await asyncio.wait_for(dirty.wait(),timeout=1)
-  except asyncio.TimeoutError: pass
-  dirty.clear()
+  await asyncio.sleep(1.0)
   if market and msg:
-   try: await msg.edit(embed=embed())
-   except discord.HTTPException as e: log.warning("Discord edit %r",e)
-  await asyncio.sleep(INTERVAL)
+   try:
+    await msg.edit(embed=embed())
+   except discord.HTTPException as e:
+    log.warning("Discord edit %r",e)
+
 async def manager():
  global market,msg,state,ws_task
  await client.wait_until_ready(); ch=client.get_channel(CHANNEL) or await client.fetch_channel(CHANNEL)

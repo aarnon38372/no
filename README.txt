@@ -1,15 +1,8 @@
-FIXED VERSION
+MOBILE VERSION
+- Independent 1-second Discord refresh (countdown keeps moving)
+- Live Kalshi WebSocket prices
+- DOWN derived from live YES book
+- Cleaner mobile labels
+- Automatic market rollover/deletion
 
-DOWN/NO no longer uses potentially stale REST/WS NO fields.
-It is recalculated from the freshest YES book on every render:
-
-NO bid = 1.00 - YES ask
-NO ask = 1.00 - YES bid
-
-Railway variables:
-DISCORD_TOKEN
-DISCORD_CHANNEL_ID
-KALSHI_API_KEY_ID
-KALSHI_PRIVATE_KEY
-KALSHI_SERIES=KXBTC15M
-DISCORD_UPDATE_INTERVAL=0.75
+Keep the same Railway variables. Replace your repo files with this ZIP and redeploy.
