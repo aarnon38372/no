@@ -51,26 +51,47 @@ def _yes_book():
  return _num(yb), _num(ya)
 
 def embed():
- yb, ya = _yes_book()
+ yb,ya=_yes_book()
+ nb=max(0.0,min(1.0,1.0-ya)) if ya is not None else None
+ na=max(0.0,min(1.0,1.0-yb)) if yb is not None else None
 
- # Binary complement:
- # NO bid = 1 - YES ask
- # NO ask = 1 - YES bid
- nb = max(0.0, min(1.0, 1.0 - ya)) if ya is not None else None
- na = max(0.0, min(1.0, 1.0 - yb)) if yb is not None else None
+ # Use the current ask as the big easy-to-read price.
+ up_main=ya if ya is not None else yb
+ down_main=na if na is not None else nb
+ up_num=(up_main or 0)
+ down_num=(down_main or 0)
+ color=0x2ECC71 if up_num>=down_num else 0xED4245
 
- last = state.get("price_dollars")
- if last is None:
-  last = market.get("last_price_dollars") if market else None
+ e=discord.Embed(
+  title="₿  BTC • 15 MIN",
+  description="**LIVE KALSHI MARKET**",
+  color=color,
+  timestamp=datetime.now(timezone.utc)
+ )
 
- e=discord.Embed(title="₿ BTC • 15 MIN",description=market.get("title","Live market"),color=0x5865F2,timestamp=datetime.now(timezone.utc))
- e.add_field(name="🟢 UP",value=f'Bid **{pc(yb)}**\\nAsk **{pc(ya)}**',inline=True)
- e.add_field(name="🔴 DOWN",value=f'Bid **{pc(nb)}**\\nAsk **{pc(na)}**',inline=True)
- e.add_field(name="Last Trade",value=f'**{pc(last)}**',inline=True)
- e.add_field(name="⏱ TIME LEFT",value=f"**{left()}**",inline=True)
- e.add_field(name="📡 FEED",value="⚡ LIVE",inline=True)
- e.add_field(name="Ticker",value=f'`{market.get("ticker","—")}`',inline=False)
- e.set_footer(text="Kalshi WebSocket • live 15m market")
+ # Discord embeds do not support true custom font sizes, so headings +
+ # bold values give the cleanest large mobile presentation.
+ e.add_field(
+  name="🟢  UP",
+  value=f"**{pc(up_main)}**\n`BID {pc(yb)}  •  ASK {pc(ya)}`",
+  inline=False
+ )
+ e.add_field(
+  name="🔴  DOWN",
+  value=f"**{pc(down_main)}**\n`BID {pc(nb)}  •  ASK {pc(na)}`",
+  inline=False
+ )
+ e.add_field(
+  name="⏱  TIME LEFT",
+  value=f"**{left()}**",
+  inline=True
+ )
+ e.add_field(
+  name="⚡  STATUS",
+  value="**LIVE**",
+  inline=True
+ )
+ e.set_footer(text=f"{market.get('ticker','KXBTC15M')} • auto-rollover")
  return e
 
 async def feed(ticker):

@@ -1,8 +1,14 @@
-MOBILE VERSION
-- Independent 1-second Discord refresh (countdown keeps moving)
-- Live Kalshi WebSocket prices
-- DOWN derived from live YES book
-- Cleaner mobile labels
-- Automatic market rollover/deletion
+PHONE REDESIGN
 
-Keep the same Railway variables. Replace your repo files with this ZIP and redeploy.
+- Big UP price
+- Big DOWN price
+- Compact BID / ASK line
+- Time left + LIVE only
+- Ticker moved to small footer
+- Removed Last Trade clutter
+- Fixed literal \n display
+- Independent 1-second Discord refresh
+- Kalshi authenticated WebSocket remains the live data source
+- Automatic 15-minute rollover and old-message deletion
+
+No Railway variable changes required.
