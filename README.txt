@@ -14,3 +14,9 @@ Existing Railway variables still work. Optional tuning:
 DISCORD_UPDATE_INTERVAL=1.25
 KALSHI_STALE_SECONDS=15
 KALSHI_SERIES=KXBTC15M
+
+
+ROLLOVER UPDATE:
+- Every new KXBTC15M ticker deletes the prior Discord live-market card.
+- A brand-new Discord message is created for the new market; old cards are never reused.
+- Railway logs show deleted old message ID and created new message ID/ticker.

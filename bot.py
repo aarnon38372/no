@@ -9,7 +9,7 @@ TOKEN=os.environ["DISCORD_TOKEN"]; CHANNEL=int(os.environ["DISCORD_CHANNEL_ID"])
 SERIES=os.getenv("KALSHI_SERIES","KXBTC15M"); REST=os.getenv("KALSHI_REST_URL","https://api.elections.kalshi.com/trade-api/v2").rstrip("/"); WS=os.getenv("KALSHI_WS_URL","wss://api.elections.kalshi.com/trade-api/ws/v2")
 INTERVAL=max(1.0,float(os.getenv("DISCORD_UPDATE_INTERVAL","1.25"))); STALE=max(8.0,float(os.getenv("KALSHI_STALE_SECONDS","15")))
 logging.basicConfig(level=os.getenv("LOG_LEVEL","INFO"),format="%(asctime)s %(levelname)s %(name)s: %(message)s"); log=logging.getLogger("live-market")
-client=discord.Client(intents=discord.Intents.default()); http=None; market=None; message=None; state={}; state_updated=0.0; feed_task=None; started=False; channel=None
+client=discord.Client(intents=discord.Intents.default()); http=None; market=None; message=None; message_ticker=None; state={}; state_updated=0.0; feed_task=None; started=False; channel=None
 key=serialization.load_pem_private_key(KEY_PEM.encode(),password=None)
 
 def signed(method,path):
@@ -73,28 +73,48 @@ async def feed(ticker):
         await asyncio.sleep(backoff); backoff=min(20,backoff*2)
 
 async def ensure_message():
-    global message
+    global message,message_ticker
     if not market:return
+    ticker=market.get("ticker")
+    # Never edit an old-market card into a new market. If ownership differs,
+    # delete the old card and force creation of a brand-new Discord message.
+    if message and message_ticker!=ticker:
+        try: await message.delete()
+        except discord.NotFound: pass
+        except discord.HTTPException as e: log.warning("Old market message delete failed: %s",e)
+        message=None; message_ticker=None
     if message:
         try: await message.edit(embed=embed()); return
-        except discord.NotFound: message=None
+        except discord.NotFound: message=None; message_ticker=None
         except discord.HTTPException as e: log.warning("Discord edit failed: %s",e); return
-    try: message=await channel.send(embed=embed())
+    try:
+        message=await channel.send(embed=embed())
+        message_ticker=ticker
+        log.info("Created NEW live-market message id=%s ticker=%s",message.id,ticker)
     except discord.HTTPException as e:log.warning("Discord send failed: %s",e)
 
 async def manager():
-    global market,message,state,state_updated,feed_task,channel
+    global market,message,message_ticker,state,state_updated,feed_task,channel
     await client.wait_until_ready(); channel=client.get_channel(CHANNEL) or await client.fetch_channel(CHANNEL)
     while not client.is_closed():
         try:
             m=await find_market()
             if m and (not market or m["ticker"]!=market.get("ticker")):
-                old=message; market=m; state={}; state_updated=0.0
+                old=message; old_ticker=message_ticker; market=m; state={}; state_updated=0.0
                 if feed_task: feed_task.cancel(); await asyncio.gather(feed_task,return_exceptions=True)
                 if old:
-                    try:await old.delete()
-                    except discord.HTTPException:pass
-                message=None; await rest_refresh(); await ensure_message(); feed_task=asyncio.create_task(feed(m["ticker"]),name=f"kalshi-feed-{m['ticker']}"); log.info("Rolled to %s",m["ticker"])
+                    try:
+                        await old.delete()
+                        log.info("Deleted OLD live-market message id=%s ticker=%s",old.id,old_ticker)
+                    except discord.NotFound: pass
+                    except discord.HTTPException as e: log.warning("Old market message delete failed: %s",e)
+                # Clear the reference BEFORE creating the replacement. This
+                # guarantees a new Discord message ID for every new Kalshi ticker.
+                message=None; message_ticker=None
+                await rest_refresh()
+                await ensure_message()
+                feed_task=asyncio.create_task(feed(m["ticker"]),name=f"kalshi-feed-{m['ticker']}")
+                log.info("Rolled to NEW market %s",m["ticker"])
             elif m: market.update(m)
             if feed_task and feed_task.done():
                 err=feed_task.exception() if not feed_task.cancelled() else None; log.warning("Feed task stopped unexpectedly: %r; restarting",err); feed_task=asyncio.create_task(feed(market["ticker"]),name=f"kalshi-feed-{market['ticker']}")
