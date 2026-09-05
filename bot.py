@@ -51,6 +51,7 @@ def embed():
     up=ya if ya is not None else yb; down=na if na is not None else nb; age=(time.monotonic()-state_updated) if state_updated else 999; live=age<STALE
     color=0x23A55A if live else 0xF0B232
     e=discord.Embed(title="₿  BTC • 15 MIN",description=("🟢 **LIVE KALSHI MARKET**" if live else "🟡 **RECONNECTING • LAST KNOWN PRICES**"),color=color,timestamp=datetime.now(timezone.utc))
+    e.set_author(name="BTC LIVE MARKET")
     e.add_field(name="📈 UP",value=f"# {pc(up)}\n`BID {pc(yb)}  •  ASK {pc(ya)}`",inline=False); e.add_field(name="📉 DOWN",value=f"# {pc(down)}\n`BID {pc(nb)}  •  ASK {pc(na)}`",inline=False)
     e.add_field(name="⏱ TIME LEFT",value=f"**{left()}**",inline=True); e.add_field(name="⚡ FEED",value=("**LIVE**" if live else "**RECOVERING**"),inline=True); e.add_field(name="📡 AGE",value=f"**{age:.0f}s**" if state_updated else "**—**",inline=True)
     e.set_footer(text=f"{market.get('ticker','KXBTC15M') if market else 'Waiting for market'} • auto-rollover • self-healing feed"); return e
@@ -72,6 +73,33 @@ async def feed(ticker):
         except Exception as e:log.warning("WS reconnect for %s: %s",ticker,e)
         await asyncio.sleep(backoff); backoff=min(20,backoff*2)
 
+def is_live_market_card(msg):
+    if not client.user or msg.author.id!=client.user.id or not msg.embeds:return False
+    e=msg.embeds[0]
+    title=(e.title or "").upper()
+    desc=(e.description or "").upper()
+    author=(e.author.name or "").upper() if e.author else ""
+    footer=(e.footer.text or "").upper() if e.footer else ""
+    return ("BTC" in title and "15 MIN" in title and
+            ("LIVE KALSHI MARKET" in desc or "RECONNECTING" in desc or
+             "BTC LIVE MARKET" in author or "AUTO-ROLLOVER" in footer))
+
+async def purge_live_market_cards(keep_id=None):
+    """Delete ALL bot-owned live-market cards except the one explicitly kept."""
+    deleted=0
+    try:
+        async for msg in channel.history(limit=200):
+            if keep_id is not None and msg.id==keep_id:continue
+            if is_live_market_card(msg):
+                try:
+                    await msg.delete(); deleted+=1
+                except discord.NotFound:pass
+                except discord.HTTPException as e:log.warning("Could not delete stale live card %s: %s",msg.id,e)
+    except discord.HTTPException as e:
+        log.warning("Live-card cleanup scan failed: %s",e)
+    if deleted:log.info("Deleted %d stale/duplicate live-market message(s)",deleted)
+    return deleted
+
 async def ensure_message():
     global message,message_ticker
     if not market:return
@@ -91,11 +119,14 @@ async def ensure_message():
         message=await channel.send(embed=embed())
         message_ticker=ticker
         log.info("Created NEW live-market message id=%s ticker=%s",message.id,ticker)
+        await purge_live_market_cards(keep_id=message.id)
     except discord.HTTPException as e:log.warning("Discord send failed: %s",e)
 
 async def manager():
     global market,message,message_ticker,state,state_updated,feed_task,channel
     await client.wait_until_ready(); channel=client.get_channel(CHANNEL) or await client.fetch_channel(CHANNEL)
+    # Enforce one-card ownership after every Railway restart/redeploy.
+    await purge_live_market_cards()
     while not client.is_closed():
         try:
             m=await find_market()
@@ -108,8 +139,9 @@ async def manager():
                         log.info("Deleted OLD live-market message id=%s ticker=%s",old.id,old_ticker)
                     except discord.NotFound: pass
                     except discord.HTTPException as e: log.warning("Old market message delete failed: %s",e)
-                # Clear the reference BEFORE creating the replacement. This
-                # guarantees a new Discord message ID for every new Kalshi ticker.
+                # A redeploy/process restart loses the old message reference, so
+                # scan the channel and remove every stale/duplicate card as well.
+                await purge_live_market_cards()
                 message=None; message_ticker=None
                 await rest_refresh()
                 await ensure_message()
